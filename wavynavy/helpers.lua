@@ -3,7 +3,8 @@
 -- sign of v as -1 or 1 (zero counts as positive)
 function sgn(v) return v < 0 and -1 or 1 end
 
-function sgnb(v) -- two's-complement byte -> signed (dive steps, blast dots)
+-- two's-complement byte -> signed (dive steps, blast dots)
+function sgnb(v)
  return v >= 128 and v - 256 or v
 end
 
@@ -11,31 +12,37 @@ end
 function clamp(lo, v, hi) return math.max(lo, math.min(v, hi)) end
 
 -- world (apple hi-res) -> screen. Both axes scale to preserve the original's
--- 4:3 shape (see constants.lua); X is additionally offset by fld_ox to centre
--- the pillarboxed playfield between the black side margins, and Y by fld_oy to
--- keep the top heli row clear of the status line text.
-function scrx(ax) return math.floor((ax - fld_x0) * scale_x + fld_ox) end
-function scry(ay) return math.floor((ay - fld_y0) * scale_y + fld_oy) end
+-- 4:3 shape (see constants.lua); X is additionally offset by FLD_OX to place
+-- the pillarboxed playfield between the black side rails, and Y by FLD_OY
+function scrx(ax) return math.floor((ax - FLD_X0) * SCALE_X + FLD_OX) end
+-- apple y -> screen y (see scrx)
+function scry(ay) return math.floor((ay - FLD_Y0) * SCALE_Y + FLD_OY) end
 
 -- confine drawing to the pillarboxed playfield, so sprites straddling the edge
 -- are cut at the margin instead of bleeding into the black bars
-function clip_field() clip(fld_ox, 0, fld_w, scr_h) end
+function clip_field() clip(FLD_OX, 0, FLD_W, SCR_H) end
 
--- the rotor-blade tip blanked this oframe, as a glyph-local x span on the top
--- row. The port draws one fully-drawn heli glyph per heading (see spr_heli)
--- and fakes the spin by alternately eating the blade's rear and forward end,
--- the way the original alternated its extra rotor pass left/right ($5877 vs
--- $588B, toggled per slot through $9600,X). Tips are keyed by heading because
--- the blade sits at cols 4-15 facing right but 0-10 facing left.
-local heli_tip = {[0] = {4, 12}, [1] = {7, 0}} -- {rear, forward} x per hface
+-- the x that centres a w-px run in the playfield
+function fld_cx(w) return FLD_OX + (FLD_W - w) // 2 end
+
+-- the rotor-blade tip blanked this oframe, as an x span on the top row of the
+-- glyph as drawn. The heli glyph is drawn with its rotor complete (see
+-- SPRITE_HELI) and the spin is faked by alternately eating the blade's rear and
+-- forward end, the way the original alternated its extra rotor pass
+-- left/right ($5877 vs $588B, toggled per slot through $9600,X). Tips are
+-- keyed by heading because the blade sits at cols 4-15 of the right-facing
+-- glyph, so at cols 0-11 of the flipped (left-facing) one
+local HELI_TIP = {[0] = {4, 12}, [1] = {8, 0}} -- {rear, forward} x per hface
+-- the blanked tip's x and width for heading hface this oframe
 function heli_blade_span(hface)
- return heli_tip[hface or 0][1 + oframe % 2], 4
+ return HELI_TIP[hface or 0][1 + oframe % 2], 4
 end
 
--- blank that tip on the drawn glyph; sx,sy is its top-left (wspr/spr call)
+-- blank that tip on the drawn glyph; sx,sy is its top-left as drawn (the
+-- wspr/spr call's, FLIP_DX included)
 function heli_blade_black(sx, sy, hface)
  local tx, tw = heli_blade_span(hface)
- rect(sx + tx, sy, tw, 1, 0)
+ rect(sx + tx, sy, tw, 1, COLOR_SLOT_0)
 end
 
 -- draw-time tick interpolation: the sim steps at 18.75Hz but the screen runs
@@ -58,6 +65,7 @@ draw_fraction = 1
 -- clock (correct game speed). Probes that drive updates in a tight loop set
 -- fixed_dt=true to get the old exact fixed-step behavior.
 local last_ms, dt_ema, g_dt
+-- display frames elapsed since the last call, smoothed (PORT: no original counterpart)
 function frame_dt()
  if fixed_dt then return 1 end
  local now = time()
@@ -78,14 +86,14 @@ end
 
 -- draw-time blend from last-tick a to current b (see draw_fraction above)
 function lerpd(a, b)
- if smooth == 0 or a == nil then return b end
+ if SMOOTH == 0 or a == nil then return b end
  local d = b - a
  if d > 24 or d < -24 then return b end
  return a + d * draw_fraction
 end
 -- lerpd for mod-256 enemy coords: blends the short way across the wrap
 function lerpw(a, b)
- if smooth == 0 or a == nil then return b end
+ if SMOOTH == 0 or a == nil then return b end
  local d = (b - a + 128) % 256 - 128
  if d > 24 or d < -24 then return b end
  return (a + d * draw_fraction) % 256
@@ -98,27 +106,28 @@ function pal(c, d) poke4(0x7FE0 + c, d) end
 -- rather than 16 nibble pokes -- pal_reset used to run after every one of
 -- the 40 formation sprites, 640 poke4 calls a frame; callers now also skip
 -- it when nothing was remapped.
-local pal_ident = {}
-for i = 0, 7 do pal_ident[i] = (2 * i + 1) * 16 + 2 * i end -- 0x10, 0x32, .. 0xFE
+local PAL_IDENT = {}
+for i = 0, 7 do PAL_IDENT[i] = (2 * i + 1) * 16 + 2 * i end -- 0x10, 0x32, .. 0xFE
 -- undo every pal() remap (identity palette map)
 function pal_reset()
- for i = 0, 7 do poke(0x3FF0 + i, pal_ident[i]) end
+ for i = 0, 7 do poke(0x3FF0 + i, PAL_IDENT[i]) end
 end
 -- every colour but 0 -> 7: the whiten-below-the-surface look (waves.lua wspr)
 function pal_white()
- poke(0x3FF0, 0x70) -- index 0 stays 0 (transparent), index 1 -> 7
- for i = 1, 7 do poke(0x3FF0 + i, 0x77) end
+ poke(0x3FF0, COLOR_SLOT_7 * 16) -- index 0 stays 0 (transparent), index 1 -> 7
+ for i = 1, 7 do poke(0x3FF0 + i, COLOR_SLOT_7 * 17) end
 end
 
-function fp() return btnp(4) or btnp(5) end -- fire pressed (A or B)
-
--- fire starts the game, but not while up or down is held: fire+down is the
--- hiscore-reset combo and fire+up the display-mode combo, and neither may ever
--- read as a start press
-function xp() return (btnp(4) or btnp(5)) and not (btn(0) or btn(1)) end
-
-function lp() return btnp(2) end -- left: decrease difficulty (attract screens)
-function rp() return btnp(3) end -- right: increase difficulty
+-- fire pressed (A or B)
+function fp() return btnp(4) or btnp(5) end
+-- A pressed: start (attract screens), select (options page)
+function xp() return btnp(4) end
+-- B pressed: options (title), back to the title (elsewhere)
+function bp() return btnp(5) end
+-- left pressed: step the highlighted option back (options page)
+function lp() return btnp(2) end
+-- right pressed: step it forward
+function rp() return btnp(3) end
 
 -- remove list entries failing keep(e), preserving order (reverse sweep)
 function prune(list, keep)

@@ -1,7 +1,7 @@
 -- title: two planes sky-write WAVY NAVY through the dive VM (the original's
 -- $8800/$8A00 paths stamping $7C puffs), then the credits reveal
 
-local orig_txt = "ORIGINAL BY RODNEY MCAULEY"
+local ORIG_TXT = "ORIGINAL BY RODNEY MCAULEY (1983)"
 
 -- start the two sky-writing planes on their paths and reset the credit reveal
 function title_init()
@@ -23,9 +23,6 @@ function title_init()
  show_remake = false
  remake_t = 0
  rplane_x = nil -- flyby that wipes in the "remake by" line
- diff_blink = 0
- hs_t = 0
- disp_t = 0
 end
 
 -- run one plane's dive ticks, latching 2x once its lettering ends: a >=20-run
@@ -45,7 +42,7 @@ local function title_step(e)
  end
 end
 
--- skip the intro to the settled title (difficulty changes bounce back here):
+-- skip the intro to the settled title (B and the options page land here):
 -- run each plane's writing to its end so the name cloud is fully formed
 function title_settle()
  for _, e in ipairs(tplanes) do
@@ -55,7 +52,7 @@ function title_settle()
   end
  end
  tdone = true
- tdone_t = expl_of + 24 -- past the "original by" fade so it shows fully lit
+ tdone_t = EXPL_OF + 24 -- past the "original by" fade so it shows fully lit
  show_orig = true
  show_remake = true
  remake_t = title_t
@@ -67,10 +64,9 @@ end
 function title_update()
  local dt = frame_dt() -- dt: intro pacing holds real seconds at any fps
  title_t = title_t + dt
- if diff_blink > 0 then diff_blink = diff_blink - dt end
  sea_ph = sea_ph - 0.5 * dt -- title swell scrolls right at the fast wave speed
  if not tdone then
-  title_acc = title_acc + title_vspeed * dt
+  title_acc = title_acc + TITLE_VSPEED * dt
   local steps = math.floor(title_acc)
   title_acc = title_acc - steps
   local fin = false
@@ -113,10 +109,10 @@ function title_update()
   end
  else
   tdone_t = tdone_t + dt
-  if tdone_t >= expl_of then
+  if tdone_t >= EXPL_OF then
    show_orig = true
    -- hold 1.5s after "original by" before launching the flyby
-   if not rplane_x and tdone_t >= expl_of + 90 then rplane_x = -8 end
+   if not rplane_x and tdone_t >= EXPL_OF + 90 then rplane_x = -8 end
   end
   if rplane_x and not show_remake then
    rplane_x = rplane_x + 2 * dt -- fly l->r, wiping in the "remake by" line
@@ -126,32 +122,23 @@ function title_update()
    end
   end
  end
- prune(tbooms, function(b) b.ph = b.ph + 0.5 * dt return b.ph < expl_of end)
- -- either button starts; left/right step difficulty; hold advances to demo
- if title_t > 20 and not combo_tick() then
+ prune(tbooms, function(b) b.ph = b.ph + 0.5 * dt return b.ph < EXPL_OF end)
+ -- A starts, B opens the options page; the hold advances to the demo. The
+ -- 20-frame grace keeps a press carried in from game over from acting here
+ if title_t > 20 then
   if xp() then
    start_game()
-  elseif lp() or rp() then
-   set_diff(lp() and -1 or 1)
-   if not show_remake then title_settle() end
-   remake_t = title_t -- restart the pre-demo hold
+  elseif bp() then
+   goto_options()
   elseif show_remake and title_t >= remake_t + 300 then
    goto_demo()
   end
  end
 end
 
--- difficulty readout: name (blinks 2s after a change) + hint
-local function diff_draw()
- if diff_blink <= 0 or time() % 500 < 300 then
-  cprint("DIFFICULTY: " .. diff_names[diff + 1], 95, 10)
- end
- cprint("<- / -> TO CHANGE DIFFICULTY", 103, 5)
-end
-
 -- draw the sea, the smoke lettering, the planes or the credits and prompts
 function title_draw()
- cls(0)
+ cls(COLOR_SLOT_0)
  clip_field()
  waves_draw()
  clip()
@@ -159,27 +146,31 @@ function title_draw()
  clip_field() -- the skywriting is world space; the text below is not
  draw_puffs(6) -- nudged above the sea
  for _, b in ipairs(tbooms) do
-  draw_boom(b.x, b.y, b.ph, xpl_p, 9)
+  draw_boom(b.x, b.y, b.ph, xpl_p, COLOR_SLOT_9)
  end
  clip()
  if tdone then
   if show_orig then
    -- fade the credit up out of the smoke: dark -> grey -> brown -> orange
-   local ramp = {1, 5, 4, 9}
-   cprint(orig_txt, 68, ramp[math.min((tdone_t - expl_of) // 8 + 1, 4)])
+   local ramp = {COLOR_SLOT_1, COLOR_SLOT_5, COLOR_SLOT_4, COLOR_SLOT_9}
+   cprint(ORIG_TXT, 69, ramp[math.min((tdone_t - EXPL_OF) // 8 + 1, 4)])
   end
   if show_remake then
-   cprint("REMAKE BY DAVE TEMPLIN", 78, 14)
-   if diff_blink > 0 or time() % 1000 < 600 then
-    cprint("PRESS FIRE TO START", 87, 7)
+   cprint("REMAKE BY DAVE TEMPLIN", 78, COLOR_SLOT_14)
+   -- three 9 px lines ending at y=109, clear of the swell's highest crest
+   -- (screen y 113)
+   if time() % 1000 < 600 then
+    cprint("PRESS A TO START", 87, COLOR_SLOT_7)
+    cprint("OR PRESS B FOR OPTIONS", 96, COLOR_SLOT_7)
    end
-   diff_draw()
+   -- the current difficulty, steady under the blinking prompts
+   cprint("DIFFICULTY: " .. DIFF_NAMES[diff + 1], 105, COLOR_SLOT_6)
   elseif rplane_x then
    -- reveal the remake line left of the flyby, then the plane
    clip(0, 78, math.max(rplane_x, 0), 8)
-   cprint("REMAKE BY DAVE TEMPLIN", 78, 14)
+   cprint("REMAKE BY DAVE TEMPLIN", 78, COLOR_SLOT_14)
    clip_field()
-   spr(256 + spr_plane, rplane_x - 8, 72, 0, 1, 0, 0, 2, 2)
+   spr(SPRITE_BANK + SPRITE_PLANE, rplane_x - 8, 72, COLOR_SLOT_0, 1, 0, 0, 2, 2)
    clip()
   end
  else
@@ -187,7 +178,7 @@ function title_draw()
    if not e.done then
     local f = e.facing or 0
     local base = f < 8 and 2 * f or 32 + 2 * (f - 8)
-    spr(256 + spr_plane + base, scrx(e.x) - 6, scry(e.y) - 11, 0, 1, 0, 0, 2, 2)
+    spr(SPRITE_BANK + SPRITE_PLANE + base, scrx(e.x) - 6, scry(e.y) - 11, COLOR_SLOT_0, 1, 0, 0, 2, 2)
    end
   end
  end

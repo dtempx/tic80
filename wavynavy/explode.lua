@@ -12,7 +12,7 @@ xpl_h = {0, 23, {0,20,40,60,80,100,120,140,160,180,200,220,240,260,280,
 -- resolve the blast table addresses and empty the effect lists; the first
 -- call also bakes the dense blast phases into the tile bank (fx_bake below)
 function fx_init()
- xpl_p[1], xpl_r[1], xpl_h[1] = xplp_b, xplr_b, xplh_b
+ xpl_p[1], xpl_r[1], xpl_h[1] = XPLP_B, XPLR_B, XPLH_B
  booms = {}
  puffs = {}
  splashes = {}
@@ -31,13 +31,13 @@ end
 
 -- age blasts and splashes one tick, dropping the finished ones
 function fx_tick()
- prune(booms, function(b) b.ph = b.ph + 1 return b.ph < expl_of end)
+ prune(booms, function(b) b.ph = b.ph + 1 return b.ph < EXPL_OF end)
  prune(splashes, function(s) s.ph = s.ph + 1 return s.ph < 8 end)
 end
 
-boom_dense = 0.54 -- fraction of a plane blast's life the dense fireball covers
+BOOM_DENSE = 0.54 -- fraction of a plane blast's life the dense fireball covers
 -- rim colour per body colour: orange blast burns brown, green-plane blast dark blue
-xpl_rim = {[9] = 4, [12] = 1}
+XPL_RIM = {[COLOR_SLOT_9] = COLOR_SLOT_4, [COLOR_SLOT_12] = COLOR_SLOT_1}
 
 -- deterministic per-cell speckle (quadratic: a linear mix streaks diagonally)
 local function bhash(x, y)
@@ -63,7 +63,7 @@ end
 
 -- holed mass, fill .67->.51, grows low and wide, split by a lobe seam. The
 -- pico8-fitted geometry (docs/explosions-fx.md) rescaled to this port's pixel
--- space: x1.5 horizontal (scale_x/(8/15)), x1.125 vertical (scale_y/(2/3)).
+-- space: x1.5 horizontal (SCALE_X/(8/15)), x1.125 vertical (SCALE_Y/(2/3)).
 -- Always generated in the orange scheme (body 9, rim 4); the green-plane
 -- scheme is a pal() remap at draw time (draw_boom).
 local function gen_fball(t, plot)
@@ -87,14 +87,14 @@ local function gen_fball(t, plot)
    -- the seam column only thins -- the original's is a broken gap, not a clean split
    if q <= 1 + h * .3 and q >= hole2 and h > cut
     and (dx ~= 0 or h > .75) and (dx % 2 == 0 or h > .55) then
-    plot(dx, dy, q > .55 + h * .25 and 4 or 9)
+    plot(dx, dy, q > .55 + h * .25 and COLOR_SLOT_4 or COLOR_SLOT_9)
    end
   end
  end
  -- white core: two dots flanking the seam, gone by mid-phase
  if t < .55 then
-  plot(-3, 0, 7) plot(-2, 0, 7)
-  plot(2, 0, 7) plot(3, 0, 7)
+  plot(-3, 0, COLOR_SLOT_7) plot(-2, 0, COLOR_SLOT_7)
+  plot(2, 0, COLOR_SLOT_7) plot(3, 0, COLOR_SLOT_7)
  end
 end
 
@@ -119,21 +119,21 @@ local function gen_puff(t, plot)
    if q <= 1 + h * .3 and q >= hole2 and h > dcut then
     -- white smoke stays solid; only the blue takes the hgr raster break-up
     if q < wlim then
-     plot(dx, dy, 7)
+     plot(dx, dy, COLOR_SLOT_7)
     elseif h > bcut and (dx % 2 == 0 or h > .55) then
-     plot(dx, dy, 12)
+     plot(dx, dy, COLOR_SLOT_12)
     end
    end
   end
  end
 end
 
--- kind 1 = fireball at t = ph / (expl_of * boom_dense), 2 = puff at t = ph / expl_of
+-- kind 1 = fireball at t = ph / (EXPL_OF * BOOM_DENSE), 2 = puff at t = ph / EXPL_OF
 local function gen_phase(kind, ph, plot)
  if kind == 1 then
-  gen_fball(ph / (expl_of * boom_dense), plot)
+  gen_fball(ph / (EXPL_OF * BOOM_DENSE), plot)
  else
-  gen_puff(ph / expl_of, plot)
+  gen_puff(ph / EXPL_OF, plot)
  end
 end
 
@@ -156,6 +156,7 @@ end
 -- phases that stay memoised as pixel lists (blast_ph[kind][ph].px).
 local TILE_B, TILE4 = 0x4000, 0x8000 -- tile 0: byte address, nibble address
 local skyline
+-- claim a cw x ch block of tile cells on the lowest fitting shelf; its first cell id, or nil when full
 local function tile_alloc(cw, ch)
  local best, besty
  for c = 0, 16 - cw do
@@ -198,15 +199,16 @@ end
 -- holds (called from the first fx_init; ~60 phases, a few ms at boot).
 -- blast_ph[kind][ph] = {id, cw, ch, ox, oy} baked | {px = list, n = len} memoised
 blast_ph = nil
+-- bake the dense blast phases into the tile bank (rules above)
 function fx_bake()
  skyline = {}
  for c = 0, 15 do skyline[c] = 0 end
  local phases = {}
- local nfb = math.ceil(expl_of * boom_dense) -- fireball phases: ph/expl_of < boom_dense
+ local nfb = math.ceil(EXPL_OF * BOOM_DENSE) -- fireball phases: ph/EXPL_OF < BOOM_DENSE
  for ph = 0, nfb - 1 do
-  if ph / expl_of < boom_dense then phases[#phases + 1] = {kind = 1, ph = ph} end
+  if ph / EXPL_OF < BOOM_DENSE then phases[#phases + 1] = {kind = 1, ph = ph} end
  end
- for ph = 0, expl_of - 1 do phases[#phases + 1] = {kind = 2, ph = ph} end
+ for ph = 0, EXPL_OF - 1 do phases[#phases + 1] = {kind = 2, ph = ph} end
  for _, p in ipairs(phases) do p.px, p.n = gen_list(p.kind, p.ph) end
  table.sort(phases, function(a, b) return a.n > b.n end)
  blast_ph = {{}, {}}
@@ -229,7 +231,7 @@ local function draw_blast(kind, ph, x, y)
  if not b then
   gen_phase(kind, ph, function(dx, dy, c) pix(x + dx, y + dy, c) end)
  elseif b.id then
-  spr(b.id, x + b.ox, y + b.oy, 0, 1, 0, 0, b.cw, b.ch)
+  spr(b.id, x + b.ox, y + b.oy, COLOR_SLOT_0, 1, 0, 0, b.cw, b.ch)
  else
   local l = b.px
   for i = 1, b.n, 3 do pix(x + l[i], y + l[i + 1], l[i + 2]) end
@@ -244,16 +246,16 @@ end
 -- those round down to the tick's shape).
 function draw_boom(ax, ay, ph, frames, base, loops, heli)
  local x, y = scrx(ax), scry(ay)
- local f = ph / expl_of
+ local f = ph / EXPL_OF
  if not loops then
   if heli then -- puff runs the whole life, dots ride along as debris
    draw_blast(2, math.floor(ph), x, y)
-  elseif f < boom_dense then
+  elseif f < BOOM_DENSE then
    local remap = base ~= 9
-   if remap then pal(9, base) pal(4, xpl_rim[base]) end
+   if remap then pal(COLOR_SLOT_9, base) pal(COLOR_SLOT_4, XPL_RIM[base]) end
    draw_blast(1, math.floor(ph), x, y)
    if remap then pal_reset() end
-   if f < boom_dense * .7 then return end -- ring joins once the mass starts opening
+   if f < BOOM_DENSE * .7 then return end -- ring joins once the mass starts opening
   end
  end
  -- pick this phase's frame and its byte span in the blast table, then plot
@@ -269,8 +271,8 @@ function draw_boom(ax, ay, ph, frames, base, loops, heli)
  end
  for i = a, b - 2, 2 do
   local dx, dy = sgnb(peek(i)), sgnb(peek(i + 1))
-  local c = (math.abs(dx) + math.abs(dy) <= 2) and 7 or base
-  pix(x + math.floor(dx * scale_x), y + math.floor(dy * scale_y), c)
+  local c = (math.abs(dx) + math.abs(dy) <= COLOR_SLOT_2) and COLOR_SLOT_7 or base
+  pix(x + math.floor(dx * SCALE_X), y + math.floor(dy * SCALE_Y), c)
  end
 end
 
@@ -281,7 +283,7 @@ local function draw_splash(ax, ph)
  for dx = -2, 2 do
   local hh = math.floor(hgt * (3 - math.abs(dx)) / 3)
   if hh > 0 then
-   line(x + dx, y - hh, x + dx, y, dx == 0 and 7 or 12)
+   line(x + dx, y - hh, x + dx, y, dx == 0 and COLOR_SLOT_7 or COLOR_SLOT_12)
   end
  end
 end
@@ -298,6 +300,7 @@ function add_puff(ax, ay)
  -- two cloud shapes, picked by position so a stroke's lumps vary
  local h = math.floor(ax) * 7 + math.floor(ay) * 13
  local s = h * 2654435761 % 4294967296
+ -- a repeatable pseudo-random 0..1 for this puff, one per key k
  local function u(k) return mix(s, k) % 1000 / 1000 end
  -- speed along the loop, frames/s: drift + a slow lull/flow wave + a quicker
  -- eddy. The waves outweigh the drift, so a puff stalls and now and then
@@ -307,15 +310,15 @@ function add_puff(ax, ay)
  local a1 = 0.55 + 0.25 * u(3)
  local w1, w2 = 0.35 + 0.35 * u(4), 1.1 + 0.9 * u(5)
  table.insert(puffs, {x = ax, y = ay,
-  v = 1 + h // 3 % 2,      -- cloud shape (puff_grey/puff_tops row)
+  v = 1 + h // 3 % 2,      -- cloud shape (SPRITE_PUFF_GREY/SPRITE_PUFF_TOPS row)
   r0 = rate * drift,
   c1 = rate * a1 / w1, w1 = w1, p1 = 6.2832 * u(6),
   c2 = rate * (1 - a1) / w2, w2 = w2, p2 = 6.2832 * u(7),
-  off = 8 * u(8),          -- starting place in the loop
+  off = #SPRITE_PUFF_TOPS[1] * u(8), -- starting place in the loop
   j = h % 11 / 44})        -- 0..0.23 breeze-phase jitter
 end
 
--- a puff's place in its 8-frame loop at t seconds: the integral of its speed
+-- a puff's place in its billow loop (SPRITE_PUFF_TOPS) at t seconds: the integral of its speed
 -- (add_puff), so it only ever moves one frame at a time. A breeze gust rolling
 -- left to right every 2.6 s pushes the bands it catches 1-2 frames on and
 -- lets them ease back, a smooth billow rather than a snap to the swell
@@ -330,7 +333,7 @@ local function puff_phase(p, now)
  if q < 0.25 and g % 3 == 0 then
   ph = ph + (0.7 + (g >> 8) % 100 / 110) * math.sin(q * 12.566) ^ 2
  end
- return math.floor(ph) % 8 + 1
+ return math.floor(ph) % #SPRITE_PUFF_TOPS[p.v] + 1
 end
 
 -- two passes: every grey under-layer, then every white top, so grey only
@@ -341,12 +344,13 @@ function draw_puffs(dy)
  local now = time()
  for _, p in ipairs(puffs) do
   p.f = puff_phase(p, now)
-  local d = (p.f - puff_peak[p.v]) % 8
-  local g = (d <= 1 or d == 7) and 2 or 1
-  spr(256 + puff_grey[p.v][g], scrx(p.x) - 3, scry(p.y) - dy, 0)
+  local n = #SPRITE_PUFF_TOPS[p.v]
+  local d = (p.f - PUFF_PEAK[p.v]) % n
+  local g = (d <= 1 or d == n - 1) and 2 or 1
+  spr(SPRITE_BANK + SPRITE_PUFF_GREY[p.v][g], scrx(p.x) - 3, scry(p.y) - dy, COLOR_SLOT_0)
  end
  for _, p in ipairs(puffs) do
-  spr(256 + puff_tops[p.v][p.f], scrx(p.x) - 3, scry(p.y) - dy, 0)
+  spr(SPRITE_BANK + SPRITE_PUFF_TOPS[p.v][p.f], scrx(p.x) - 3, scry(p.y) - dy, COLOR_SLOT_0)
  end
 end
 
@@ -357,7 +361,7 @@ function fx_draw()
   draw_splash(s.x, s.ph)
  end
  for _, b in ipairs(booms) do
-  draw_boom(b.x, b.y, b.ph, b.heli and xpl_h or xpl_p, b.heli and 12 or 9,
+  draw_boom(b.x, b.y, b.ph, b.heli and xpl_h or xpl_p, b.heli and COLOR_SLOT_12 or COLOR_SLOT_9,
             nil, b.heli)
  end
 end

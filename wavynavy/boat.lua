@@ -2,44 +2,45 @@
 
 -- hull lean: steps -7..7, 5 deg apart (+ = clockwise, bow-right down) --
 -- only the range the boat reaches riding the swell (steepest ~36 deg). The
--- sheet holds frames 0-7 (0..35 deg) at spr_boat+2k, turned about the block
+-- sheet holds frames 0-7 (0..35 deg) at SPRITE_BOAT+2k, turned about the block
 -- centre; a left lean is the same frame x-flipped (the hull is symmetric
 -- about the pivot column, so the flip is exactly the mirrored angle).
 -- The cabin and gun are not on the sheet: they always stand straight up,
--- drawn in code from boat_tower. Per step (5 values): cabin centre column,
+-- drawn in code from BOAT_TOWER. Per step (5 values): cabin centre column,
 -- flat top row, then the three column heights -- each column reaches down
 -- to the first solid hull pixel (capped at 4), so on a tilted deck the
 -- upright cabin gets a slanted base. The 3-px gun rises from its middle.
 -- Entries 0-14 are steps -7..7 (entry = step+7).
-local boat_tower = {7,6,3,2,2, 7,6,3,2,2, 8,5,3,3,2, 8,5,3,3,2, 8,6,2,2,2,
+local BOAT_TOWER = {7,6,3,2,2, 7,6,3,2,2, 8,5,3,3,2, 8,5,3,3,2, 8,6,2,2,2,
  8,6,2,2,2, 8,6,2,2,2, 8,6,2,2,2, 8,6,2,2,2, 8,6,2,2,2, 8,6,2,2,2, 8,6,2,2,3,
  8,6,2,2,3, 8,6,2,2,3, 8,6,2,2,3,
  -- entries 15/16: the sink poses (steps +7 / -7) with the cabin nudged 1 px
  -- toward the raised stern, so the white submerged shape reads nose-down
  7,5,2,3,3, 8,5,3,3,2}
-local tower_sink_r, tower_sink_l = 15, 16
+local TOWER_SINK_R, TOWER_SINK_L = 15, 16
 
 -- cabin + gun for tower entry e at block origin (x, y); below the sea
 -- surface row surf (optional) they go white, like a submerged sprite
 local function draw_tower(e, x, y, surf)
  local i = 5 * e
- local cx, top = x + boat_tower[i + 1], y + boat_tower[i + 2]
+ local cx, top = x + BOAT_TOWER[i + 1], y + BOAT_TOWER[i + 2]
  for c = 0, 2 do
-  for py = top, top + boat_tower[i + 3 + c] - 1 do
-   pix(cx - 1 + c, py, surf and py >= surf and 7 or 9)
+  for py = top, top + BOAT_TOWER[i + 3 + c] - 1 do
+   pix(cx - 1 + c, py, surf and py >= surf and COLOR_SLOT_7 or COLOR_SLOT_9)
   end
  end
  for py = top - 3, top - 1 do
-  pix(cx, py, surf and py >= surf and 7 or 12)
+  pix(cx, py, surf and py >= surf and COLOR_SLOT_7 or COLOR_SLOT_12)
  end
 end
 
 -- hull frame for lean step s (-7..7) at (x, y); the right-leaning frame
 -- x-flipped for a left lean
 local function boat_hull(s, x, y)
- spr(256 + spr_boat + 2 * math.abs(s), x, y, 0, 1, s < 0 and 1 or 0, 0, 2, 2)
+ spr(SPRITE_BANK + SPRITE_BOAT + 2 * math.abs(s), x, y, COLOR_SLOT_0, 1, s < 0 and 1 or 0, 0, 2, 2)
 end
 
+-- hull plus upright cabin and gun at lean step -7..7, block origin (x, y)
 local function boat_body(step, x, y)
  boat_hull(step, x, y)
  draw_tower(step + 7, x, y)
@@ -53,18 +54,18 @@ end
 
 -- the sinking pose, bow down toward the heading, white below the surface
 local function boat_sink(right, x, y, ax)
- wspr(256 + spr_boat + 14, x, y, 2, 2, right and 0 or 1, ax)
- draw_tower(right and tower_sink_r or tower_sink_l, x, y, scry(waves_dy(ax)))
+ wspr(SPRITE_BANK + SPRITE_BOAT + 14, x, y, 2, 2, right and 0 or 1, ax)
+ draw_tower(right and TOWER_SINK_R or TOWER_SINK_L, x, y, scry(waves_dy(ax)))
 end
 
 -- lowest opaque row of the block for steps -7..7, so the keel can be
 -- anchored to the swell (index step+8)
-local boat_bot = {12, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 12}
+local BOAT_BOT = {12, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 12}
 
--- (re)spawn the player's boat at apple-x sx (default boat_start), clearing
+-- (re)spawn the player's boat at apple-x sx (default BOAT_START), clearing
 -- hazards, bombs and the missile, with the fleet held until the first input
 function boat_init(sx)
- p_x = sx or boat_start
+ p_x = sx or BOAT_START
  p_st = 0    -- 0 alive / 1 struck / 2 sinking / 3 sunk
  p_t = 0
  hazards_clear()
@@ -79,7 +80,7 @@ function boat_init(sx)
  armed = false -- enemies wait for the player's first input
 end
 
--- respawn after a death: fresh boat at boat_start, mines parked offscreen so
+-- respawn after a death: fresh boat at BOAT_START, mines parked offscreen so
 -- they drift back in once the player re-arms (rather than sitting in view
 -- through the get-ready)
 local function respawn()
@@ -87,7 +88,9 @@ local function respawn()
  mines_offscreen()
 end
 
-function boat_input() -- every display frame: catch presses between sim ticks
+-- poll fire every display frame so no press is missed between sim ticks:
+-- latch a fresh shot, arm the fleet, request a death-anim skip
+function boat_input()
  if demo then return end -- the demo arms/fires itself; a press starts the game
  local f = btn(4) or btn(5)
  if f and not fire_held then want_fire = true end
@@ -98,18 +101,18 @@ end
 
 -- one PLAYERUPD pass ($1817): chase the target x and ride the swell. The
 -- original runs this TWICE per oframe ($08BD/$08CC), so the boat's real pace
--- is 2*boat_dx per oframe -- boat_move below makes both calls.
+-- is 2*BOAT_DX per oframe -- boat_move below makes both calls.
 local function player_upd()
  local tx = p_x
  if demo then
   tx = demo_tx           -- chase the AI patrol target
  else
-  if btn(2) then tx = clamp_lo end
-  if btn(3) then tx = clamp_hi end
+  if btn(2) then tx = CLAMP_LO end
+  if btn(3) then tx = CLAMP_HI end
  end
  local d = tx - p_x
  -- 2x steering while waiting to respawn (get-ready), else chase speed
- local spd = boat_dx * (armed and 1 or 2)
+ local spd = BOAT_DX * (armed and 1 or 2)
  if math.abs(d) > 1 then
   p_x = p_x + spd * sgn(d)
   p_dir = sgn(d)
@@ -170,38 +173,39 @@ function boat_tick()
   p_x = p_x + 2 * p_dir
   wrap_x()
   p_t = p_t + 1
-  if p_t % 11 == 0 and p_t < 33 then psfx(sfx_playerhit, 3) end
+  if p_t % 11 == 0 and p_t < 33 then psfx(SFX_PLAYERHIT, 3) end
   if dy > 0 and p_y >= waves_y(p_x) then -- falling + meets swell
    p_st = 2
-   lsfx(sfx_playersink, 3)
+   lsfx(SFX_PLAYERSINK, 3)
   end
  elseif p_st == 2 then -- in water: sinks ~45deg toward its heading
   p_x = p_x + 1.25 * p_dir
   wrap_x()
-  p_y = p_y + sink_dy
+  p_y = p_y + SINK_DY
   if p_y >= 216 then
    p_st = 3
    p_t = 0
   end
  elseif p_st == 3 then -- sunk: recall the fleet, respawn once re-formed
   p_t = p_t + 1
-  if p_t == sink_cut then sfx_stop(3) end -- the sink drone runs into recall
+  if p_t == SINK_CUT then sfx_stop(3) end -- the sink drone runs into recall
   if p_t == 25 then
    if lose_life() then return end
   elseif p_t > 25 and formation_ready() then
    form_t = form_t + 1 -- fleet home: hold ~2s then get-ready
-   if form_t >= 28 then respawn() end
-  elseif p_t >= 25 + recall_ofs then
+   -- the demo never respawns: demo_update ends it DEMO_END_SECS after this
+   if form_t >= 28 and not demo then respawn() end
+  elseif p_t >= 25 + RECALL_OFS then
    force_formation() -- hard cutoff: snap home vs a wedged enemy
-   respawn()
+   if not demo then respawn() end
   end
  end
 end
 
 -- wrap the dead boat off one field edge and back in the other
 function wrap_x()
- if p_x > fld_x1 then p_x = fld_x0
- elseif p_x < fld_x0 then p_x = fld_x1 end
+ if p_x > FLD_X1 then p_x = FLD_X0
+ elseif p_x < FLD_X0 then p_x = FLD_X1 end
 end
 
 -- the boat has been hit: start the struck arc and freeze the assault
@@ -211,7 +215,7 @@ function player_hit()
  died = false -- this death's life-loss hasn't been resolved yet
  armed = false -- freeze the assault when struck
  hf_clear() -- the shots that queued these reports are over (sfx.lua)
- psfx(sfx_playerhit, 3)
+ psfx(SFX_PLAYERHIT, 3)
 end
 
 -- on death the board persists: in-flight slots fly home, no new attacks
@@ -259,11 +263,11 @@ end
 function msl_tick()
  if not msl then return end
  local y0 = msl.y -- pre-move y: enemies_hit sweeps the rows crossed this tick
- msl.y = msl.y - msl_dy
+ msl.y = msl.y - MSL_DY
  if enemies_hit(msl.x, msl.y, y0) or hazards_hit(msl.x, msl.y) then
   shots_hit = shots_hit + 1
   msl = nil
- elseif msl.y < fld_y0 then
+ elseif msl.y < FLD_Y0 then
   msl = nil
  end
 end
@@ -277,18 +281,22 @@ end
 -- 0, 4, 7, -7, -4 (0 / 20 / 35 deg). (The reference capture,
 -- games/wavynavy/video/deathspin, measures the original's glyphs steeper,
 -- ~42/65 deg; the port keeps the spin inside its own riding range.)
-local spin_s = {0, 4, 7, -7, -4}
+local SPIN_S = {0, 4, 7, -7, -4}
 
--- draw the player's missile, its trail frame chosen by distance flown
-local function draw_missile()
+-- draw the player's missile, its trail frame chosen by distance flown; rows
+-- from the gun tip (screen row gun_y) down are clipped, so the trail always
+-- starts at the gun however far the boat has bobbed since the launch
+local function draw_missile(gun_y)
  if not msl then return end
+ clip(FLD_OX, 0, FLD_W, gun_y)
  -- original trail ladder: launch frame, short trail, then the long pair
  -- flickering ($5B1C); nose offsets match the authored canvases
  local age = p_y - 4 - msl.y
  local f = age < 12 and 0 or age < 24 and 1 or 2 + oframe % 3
  local hgt, nose = ({2, 2, 4, 4, 4})[f + 1], ({0, 0, 2, 2, 2})[f + 1]
- spr(256 + spr_missile + f, scrx(lerpd(msl.px, msl.x)) - 3,
-     scry(lerpd(msl.py, msl.y)) - nose, 0, 1, 0, 0, 1, hgt)
+ spr(SPRITE_BANK + SPRITE_MISSILE + f, scrx(lerpd(msl.px, msl.x)) - 3,
+     scry(lerpd(msl.py, msl.y)) - nose, COLOR_SLOT_0, 1, 0, 0, 1, hgt)
+ clip_field()
 end
 
 -- sea slope under the hull -> lean step -7..7 (+ = bow-right down): the
@@ -296,8 +304,16 @@ end
 -- (the steepest swell is ~36 deg, so the whole range is used)
 local function sea_tilt(ax)
  local sl = waves_dy(ax + 7) - waves_dy(ax - 7)
- local s = math.floor(math.atan(sl * scale_y, 14 * scale_x) / (math.pi / 36) + .5)
+ local s = math.floor(math.atan(sl * SCALE_Y, 14 * SCALE_X) / (math.pi / 36) + .5)
  return math.max(-7, math.min(7, s))
+end
+
+-- the riding boat at apple-x ax: its lean step and block top row, the keel
+-- anchored just below the DRAWN (interpolated) surface so it never floats
+-- off or digs into the rolling sea
+local function riding(ax)
+ local s = sea_tilt(ax)
+ return s, scry(waves_dy(ax)) - BOAT_BOT[s + 8] + 1
 end
 
 -- draw the boat for its state (tumbling, sinking or riding the swell) and its missile
@@ -306,7 +322,7 @@ function boat_draw()
  local ax = lerpd(p_px, p_x)
  local x, y = scrx(ax), scry(lerpd(p_py, p_y))
  if p_st == 1 then -- tumbling: hull rocks through the 5-pose cycle
-  boat_spr(spin_s[p_t // 2 % 5 + 1], x - 8, y - 8)
+  boat_spr(SPIN_S[p_t // 2 % 5 + 1], x - 8, y - 8)
   return
  end
  if p_st == 2 then -- sinking: steepest lean (35 deg), bow down toward the
@@ -317,10 +333,7 @@ function boat_draw()
   mono.draw_solid(boat_sink, p_dir >= 0, x - 8, y - 8, ax)
   return
  end
- -- hull rides the swell, keel anchored just below the DRAWN (interpolated)
- -- surface so it never floats off or digs into the rolling sea
- y = scry(waves_dy(ax))
- local s = sea_tilt(ax)
- boat_spr(s, x - 8, y - boat_bot[s + 8] + 1)
- draw_missile()
+ local s, by = riding(ax) -- hull rides the swell
+ boat_spr(s, x - 8, by)
+ draw_missile(by + BOAT_TOWER[5 * (s + 7) + 2] - 3) -- gun tip row
 end

@@ -14,6 +14,18 @@ function goto_title()
  set_state("title", title_init, title_update, title_draw)
 end
 
+-- the title with its intro skipped (the WAVY NAVY cloud fully formed): where
+-- B on the attract screens and the options page lands
+function goto_title_settled()
+ goto_title()
+ title_settle()
+end
+
+-- options page: difficulty, theme, hiscore reset (B from the title)
+function goto_options()
+ set_state("options", options_init, options_update, options_draw)
+end
+
 -- attract-mode demo: the game plays itself (drawn by the play renderer)
 function goto_demo()
  set_state("demo", demo_init, demo_update, play_draw)
@@ -51,18 +63,18 @@ function go_gameover()
  set_state("gameover", gameover_init, gameover_update, gameover_draw)
 end
 
--- waves cleared this run, not counting the ones advanced/expert skip at the
--- start (diff_start_wave); read by the wave bonus and the game-over recap
+-- waves cleared this run, not counting the ones GEN-Y/zoomer skip at the
+-- start (DIFF_START_WAVE); read by the wave bonus and the game-over recap
 function waves_cleared()
- return math.max(wave - 1 - diff_start_wave[diff + 1], 0)
+ return math.max(wave - 1 - DIFF_START_WAVE[diff + 1], 0)
 end
 
 -- reset score, lives, wave and recap stats for a new run, then get ready
 function start_game()
  demo = false
  score = 0
- lives = start_lives + diff_start_lives[diff + 1] -- advanced +1, expert +2
- wave = start_wave + diff_start_wave[diff + 1] -- advanced wave 2, expert wave 3
+ lives = START_LIVES + DIFF_START_LIVES[diff + 1] -- GEN-Y +1, zoomer +2
+ wave = START_WAVE + DIFF_START_WAVE[diff + 1] -- GEN-Y wave 2, zoomer wave 3
  sd_plane, sd_heli, sd_bomber, sd_cruise = 0, 0, 0, 0 -- game-over recap stats
  shots_fired, shots_hit = 0, 0
  prev_hi = hi

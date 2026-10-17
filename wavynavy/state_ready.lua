@@ -21,26 +21,26 @@ function ready_update()
  ready_t = ready_t + dt
  -- glide at the normal boat pace over the frozen swell; no firing. Steering
  -- steps on the sim clock (as in play) so the pace matches the live game.
- -- 2*boat_dx per tick: the original's two PLAYERUPD passes (see boat.lua)
- racc = (racc or 0) + ostep * gspeed * dt
+ -- 2*BOAT_DX per tick: the original's two PLAYERUPD passes (see boat.lua)
+ racc = (racc or 0) + OSTEP * GSPEED * dt
  while racc >= 1 do
   racc = racc - 1
   p_px = p_x -- last-tick x for the draw interpolation
-  if btn(2) then p_x = math.max(p_x - 2 * boat_dx, clamp_lo) end
-  if btn(3) then p_x = math.min(p_x + 2 * boat_dx, clamp_hi) end
+  if btn(2) then p_x = math.max(p_x - 2 * BOAT_DX, CLAMP_LO) end
+  if btn(3) then p_x = math.min(p_x + 2 * BOAT_DX, CLAMP_HI) end
  end
  draw_fraction = racc
  p_y = waves_y(p_x)
  if ready_t > 20 and fp() then goto_play() end -- grace vs the opening press
 end
 
--- draw the sea, the boat, the status line and the blinking prompt
+-- draw the sea, the boat, the HUD (right rail) and the blinking prompt
 function ready_draw()
- cls(0)
+ cls(COLOR_SLOT_0)
  clip_field()
  waves_draw()
  boat_draw()
  clip()
  status_draw()
- if time() % 1000 < 600 then cprint("GET READY! PRESS FIRE", 70, 7) end
+ if time() % 1000 < 600 then cprint("GET READY! PRESS FIRE", 70, COLOR_SLOT_7) end
 end

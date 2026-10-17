@@ -3,18 +3,18 @@
 -- start the wave-clear screen: reset the tallies and play the wave's jingle
 function clear_init()
  clear_t = 0
- sea_ph = 0 -- sea holds still during the promotion
+ waves_init() -- sea holds still during the promotion (prev_ph too, no stale blend)
  clear_ph = "jingle"
  tally = 0   -- reserve boats revealed so far
  tally_t = 0
  hold_t = 0
  dtally = 0  -- waves counted so far in the wave-bonus tally
- -- wave bonus: per-difficulty points (0 on beginner) x waves cleared, not
- -- counting the waves advanced/expert skip at the start
+ -- wave bonus: per-difficulty points (0 on boomer) x waves cleared, not
+ -- counting the waves GEN-Y/zoomer skip at the start
  dcleared = waves_cleared()
- dbonus = diff_bonus[diff + 1] * dcleared
+ dbonus = DIFF_BONUS[diff + 1] * dcleared
  -- the jingle of the wave just cleared (wave was bumped at clear)
- clear_song = wcfg_song[math.min(wave - 1, 10)]
+ clear_song = WCFG_SONG[math.min(wave - 1, 10)]
  play_song(clear_song)
 end
 
@@ -27,17 +27,17 @@ local function clear_tally()
    tally = tally + 1
    add_score(50)
   end
- elseif tally < bonus_ships and tally_t >= bonus_step then
+ elseif tally < bonus_ships and tally_t >= BONUS_STEP then
   tally_t = 0
   tally = tally + 1
   add_score(50)
   play_song(10) -- bonus tick
  end
- if tally >= bonus_ships and tally_t > bonus_step then
+ if tally >= bonus_ships and tally_t > BONUS_STEP then
   if bonus_ships < 9 then
-   -- +1 ship, plus the mode's extras once late_lives_wave is cleared (wave
+   -- +1 ship, plus the mode's extras once LATE_LIVES_WAVE is cleared (wave
    -- was bumped at clear); the total still caps at 9 like the original's
-   local extra = wave - 1 >= late_lives_wave and diff_wave_lives[diff + 1] or 0
+   local extra = wave - 1 >= LATE_LIVES_WAVE and DIFF_WAVE_LIVES[diff + 1] or 0
    lives = math.min(lives + 1 + extra, 9)
   end
   clear_ph = dbonus > 0 and "dwait" or "hold"
@@ -50,8 +50,8 @@ end
 -- as the run gets long so a deep wave's tally never outstays the screen.
 local function clear_dtally()
  tally_t = tally_t + frame_dt()
- local per = diff_bonus[diff + 1]
- local step = math.max(bonus_step // math.max(wave // 6, 1), 8)
+ local per = DIFF_BONUS[diff + 1]
+ local step = math.max(BONUS_STEP // math.max(wave // 6, 1), 8)
  if tally_t > 12 and fp() then -- skip: award the rest at once
   while dtally < dcleared do
    dtally = dtally + 1
@@ -96,36 +96,47 @@ function clear_update()
  end
 end
 
--- draw the promotion, the lives-bonus boat row and the wave-bonus block
+-- the lives-bonus boats: first boat's block origin, and the pitch both across
+-- and down (a 16 px block, 13 px tall to the keel)
+local BOAT_X, BOAT_Y, BOAT_PITCH = 130, 63, 15
+
+-- draw the promotion, the lives-bonus boat rows and the wave-bonus block
 function clear_draw()
- cls(0)
+ cls(COLOR_SLOT_0)
  waves_draw()
  -- rank tops out at min(wave,10), further capped by difficulty ($144C)
- local r = math.min(wave, 10, diff_rankcap[diff + 1])
- cprint(r >= 10 and "YOU HAVE BECOME" or "YOU HAVE BEEN PROMOTED TO", 30, 6)
+ local r = math.min(wave, 10, DIFF_RANKCAP[diff + 1])
+ cprint(r >= 10 and "YOU HAVE BECOME" or "YOU HAVE BEEN PROMOTED TO", 30, COLOR_SLOT_6)
  -- deckhand/crewchief read violet/blue (original even-column art), else
  -- green/orange - the original's two-tone rank text
  local odd = r == 4 or r == 5
- bigtext(wcfg_rank[r], 42, odd and 14 or 11, odd and 12 or 9)
+ bigtext(WCFG_RANK[r], 42, odd and COLOR_SLOT_14 or COLOR_SLOT_11, odd and COLOR_SLOT_12 or COLOR_SLOT_9)
  if clear_ph == "jingle" then
-  -- the jingle's title in grey, centered on the screen, a note on each side
-  local s = song_names[clear_song + 1]
-  local w = print(s, 0, -8)
-  local x = (scr_w - w - 19) // 2
-  local y = (scr_h - 5) // 2
-  spr(256 + spr_note, x, y, 0)
-  print(s, x + 10, y, 6)
-  spr(256 + spr_note, x + w + 12, y, 0)
+  -- the jingle's title in grey, centered on the playfield, a note on each side
+  local s = SONG_NAMES[clear_song + 1]
+  local w = print(s, 0, -8,COLOR_SLOT_15)
+  local x = fld_cx(w + 19)
+  local y = (SCR_H - 5) // 2
+  spr(SPRITE_BANK + SPRITE_NOTE, x, y, COLOR_SLOT_0)
+  print(s, x + 10, y, COLOR_SLOT_6)
+  spr(SPRITE_BANK + SPRITE_NOTE, x + w + 12, y, COLOR_SLOT_0)
  else
   status_draw() -- score visibly ticks up through the bonuses
   local ships = clear_ph == "bonus" and tally or bonus_ships
-  print("BONUS", 70, 70, 9)
+  print("BONUS", 70, 70, COLOR_SLOT_9)
   if clear_ph ~= "bonus" or (clear_t // 8) % 2 == 0 then
-   print("50 X", 106, 70, 7)
+   print("50 X", 106, 70, COLOR_SLOT_7)
   end
+  -- the boats wrap into as many rows as fit between the line and the field's
+  -- right and bottom edges; once the wave bonus block takes the space below,
+  -- only the first row stays
+  local per = (FLD_OX + FLD_W - BOAT_X - 16) // BOAT_PITCH + 1
+  local rows = dbonus > 0 and clear_ph ~= "bonus" and 1
+   or (SCR_H - BOAT_Y - 13) // BOAT_PITCH + 1
   clip_field()
-  for i = 1, ships do
-   boat_spr(0, 130 + (i - 1) * 14, 63) -- upright hull + its code-drawn gun
+  for i = 0, math.min(ships, per * rows) - 1 do
+   -- upright hull + its code-drawn gun
+   boat_spr(0, BOAT_X + i % per * BOAT_PITCH, BOAT_Y + i // per * BOAT_PITCH)
   end
   clip()
  end
@@ -137,25 +148,25 @@ function clear_draw()
  if dbonus > 0 and (clear_ph == "dwait" or clear_ph == "dbonus" or clear_ph == "hold") then
   local y = 88
   -- print s right-aligned to x=100
-  local function rprint(s, ry, c) print(s, 100 - print(s, 0, -8), ry, c) end
-  rprint(diff_names[diff + 1], y, 10)
-  rprint("BONUS", y + 10, 10)
+  local function rprint(s, ry, c) print(s, 100 - print(s, 0, -8,COLOR_SLOT_15), ry, c) end
+  rprint(DIFF_NAMES[diff + 1], y, COLOR_SLOT_10)
+  rprint("BONUS", y + 10, COLOR_SLOT_10)
   -- the multiplier blinks from the moment the line appears until the wave
   -- count stops ticking, exactly as "50 X" does over the lives bonus
   if clear_ph == "hold" or (clear_t // 8) % 2 == 0 then
-   print(diff_bonus[diff + 1] .. " X", 106, y + 5, 7)
+   print(DIFF_BONUS[diff + 1] .. " X", 106, y + 5, COLOR_SLOT_7)
   end
   -- the count's slot is sized for the final number so the caption never
   -- shifts as the tally climbs; the number is centered within it
-  local nw = print(dcleared, 0, -16, 9, false, 2)
+  local nw = print(dcleared, 0, -16, COLOR_SLOT_9, false, 2)
   local x = 142
   -- the count blinks while it is tallying and settles solid on its final
   -- value once the tally is done
   if dtally > 0 and (clear_ph == "hold" or (clear_t // 8) % 2 == 0) then
-   print(dtally, x + (nw - print(dtally, 0, -16, 9, false, 2)) // 2, y + 3, 9,
+   print(dtally, x + (nw - print(dtally, 0, -16, COLOR_SLOT_9, false, 2)) // 2, y + 3, COLOR_SLOT_9,
          false, 2)
   end
-  print("WAVES", x + nw + 5, y, 7)
-  print("CLEARED", x + nw + 5, y + 10, 7)
+  print("WAVES", x + nw + 5, y, COLOR_SLOT_7)
+  print("CLEARED", x + nw + 5, y + 10, COLOR_SLOT_7)
  end
 end

@@ -7,7 +7,7 @@ function enemies_init()
  ens = {}
  bombs = {}
  local w = math.min(wave, 10)
- local h = tmpl_b + (w - 1) * 120 -- 40 slots x 3 bytes (x,y,st)
+ local h = TMPL_B + (w - 1) * 120 -- 40 slots x 3 bytes (x,y,st)
  for i = 0, 39 do
   local x, y, st = peek(h + i * 3), peek(h + i * 3 + 1), peek(h + i * 3 + 2)
   local e = {x = x, y = y, tx = x, ty = y, st = st, ph = 0, i = i,
@@ -15,7 +15,7 @@ function enemies_init()
   dive_facing(e, 1, 0)
   table.insert(ens, e)
  end
- -- slide speed: one edge-to-edge sweep takes form_secs
+ -- slide speed: one edge-to-edge sweep takes FORM_SECS
  local lo, hi = 300, 0
  for _, e in ipairs(ens) do
   if e.st == 0 then
@@ -23,19 +23,19 @@ function enemies_init()
    hi = math.max(hi, e.tx)
   end
  end
- slide_mag = math.max(0.25, (170 - (hi - lo)) / (form_secs * 60 * ostep * gspeed))
+ slide_mag = math.max(0.25, (170 - (hi - lo)) / (FORM_SECS * 60 * OSTEP * GSPEED))
  slide = slide_mag
  -- 3 launch timers: per-difficulty base, ramped per wave to a floor ($134E).
  -- RAMPDIFF runs on every wave clear with no wave cap (WAVEADV clamps only
  -- the template index), so the ramp uses the real wave number, not w
  lper, lt = {}, {}
- local base, flo = diff_base[diff + 1], diff_floor[diff + 1]
- local ram = {ramp1, ramp2, ramp3}
+ local base, flo = DIFF_BASE[diff + 1], DIFF_FLOOR[diff + 1]
+ local ram = {RAMP1, RAMP2, RAMP3}
  for k = 1, 3 do
   lper[k] = math.max(flo[k], base[k] - (wave - 1) * ram[k])
   lt[k] = lper[k]
  end
- llists = {llist1, llist2, llist3}
+ llists = {LLIST1, LLIST2, LLIST3}
 end
 
 -- yoff_min: the minimum vertical gap the port keeps between enemies. The
@@ -48,7 +48,7 @@ end
 -- true if any enemy in one of `states` sits within yoff_min of y (e excluded)
 local function y_crowded(e, y, states)
  for _, o in ipairs(ens) do
-  if o ~= e and states[o.st] and math.abs(o.y - y) < enemy_dy then
+  if o ~= e and states[o.st] and math.abs(o.y - y) < ENEMY_DY then
    return o
   end
  end
@@ -58,14 +58,15 @@ end
 -- Send an enemy to state 4 (re-descend). Keeps the original's ENEY=$E0 entry
 -- point but backs the newcomer down the queue until it clears every other
 -- climber, so a batch recycled on one frame files up in single file.
-local climbing = {[4] = true}
+local CLIMBING = {[4] = true}
+-- queue e to drop back in from the top to its slot (state 4)
 function redescend(e)
  local y = 224
- if enemy_dy > 0 then
-  local o = y_crowded(e, y, climbing)
+ if ENEMY_DY > 0 then
+  local o = y_crowded(e, y, CLIMBING)
   while o do
-   y = o.y - enemy_dy -- queue in behind the one already climbing
-   o = y_crowded(e, y, climbing)
+   y = o.y - ENEMY_DY -- queue in behind the one already climbing
+   o = y_crowded(e, y, CLIMBING)
   end
  end
  e.st = 4
@@ -79,7 +80,7 @@ local function launch(e)
  e.bt = 999 -- let the first bomb string of the dive fire at once
  if e.heli then
   e.pts = 50
-  psfx(sfx_helilaunch)
+  psfx(SFX_HELILAUNCH)
  else
   e.pts = 20
  end
@@ -95,22 +96,23 @@ end
 -- a pixel per tick until the gap opens. e.y stays the VM's own coordinate -
 -- only this small bias is added, so the path keeps the original's shape and
 -- collisions, wave-ditching and drawing all stay consistent with each other.
-local diving = {[3] = true}
+local DIVING = {[3] = true}
+-- nudge the lower of two overlapping divers down a little (rules above)
 function dive_separate(e)
- if enemy_dy <= 0 then return end
- local o = y_crowded(e, e.y, diving)
+ if ENEMY_DY <= 0 then return end
+ local o = y_crowded(e, e.y, DIVING)
  if o and math.abs(o.x - e.x) < 16 then
   -- push whichever is already lower further down; ties break on slot identity
   -- so the pair never both move the same way and chase each other
   local lower = (e.y > o.y or (e.y == o.y and e.i > o.i)) and e or o
-  lower.y = (lower.y + dive_push) % 256
+  lower.y = (lower.y + DIVE_PUSH) % 256
  end
 end
 
--- beginner easing is in force (constants.lua beg_ease_wave; also read by the
+-- boomer easing is in force (constants.lua BEG_EASE_WAVE; also read by the
 -- $87 re-dive in dive.lua)
 function beg_eased()
- return diff == 0 and wave >= beg_ease_wave
+ return diff == 0 and wave >= BEG_EASE_WAVE
 end
 
 -- enemies currently diving (state 3)
@@ -123,8 +125,8 @@ local function n_diving()
 end
 
 -- count down the three launch timers; each expiry launches the first slot
--- still in formation from that timer's launch list. On eased beginner waves
--- an expiry at the beg_max_dive cap is skipped (the timer still reloads, so
+-- still in formation from that timer's launch list. On eased boomer waves
+-- an expiry at the BEG_MAX_DIVE cap is skipped (the timer still reloads, so
 -- the next launch keeps its cadence rather than firing the instant one lands)
 function launch_tick() -- every 4th oframe
  if not armed or p_st ~= 0 then return end
@@ -132,7 +134,7 @@ function launch_tick() -- every 4th oframe
   lt[k] = lt[k] - 1
   if lt[k] <= 0 then
    lt[k] = lper[k]
-   if not (beg_eased() and n_diving() >= beg_max_dive) then
+   if not (beg_eased() and n_diving() >= BEG_MAX_DIVE) then
     for _, i in ipairs(llists[k]) do
      local e = ens[i + 1]
      if e.st == 0 then
@@ -177,7 +179,7 @@ function enemies_tick()
    e.hface = slide > 0 and 0 or 1
   elseif e.st == 1 or e.st == 5 then -- exploding: run the blast out
    e.ph = e.ph + 1
-   if e.ph >= expl_of then
+   if e.ph >= EXPL_OF then
     if e.st == 1 then
      e.st = 2
     else -- rammed enemies respawn via re-descend ($5E99)
@@ -203,7 +205,7 @@ function enemies_tick()
     elseif p_st == 0 and math.abs(e.x - p_x) < 12 and math.abs(e.y - p_y) < 7 then
      e.st = 5
      e.ph = 0
-     psfx(sfx_ram)
+     psfx(SFX_RAM)
      player_hit()
     end
    end
@@ -220,6 +222,10 @@ function enemies_tick()
  end
 end
 
+-- left screen x a heli glyph centred on screen x is drawn at: the left-facing
+-- one is the right-facing glyph x-flipped, nudged FLIP_DX
+local function heli_x(e, x) return x - 8 + (e.hface == 1 and FLIP_DX or 0) end
+
 -- one pixel of an 8x8 sprite-bank cell (SPRITES RAM 0x6000, 32 bytes/cell,
 -- 4 bytes/row, low nibble = even column)
 local function cellpx(id, c, r)
@@ -229,15 +235,17 @@ end
 
 -- is screen point (sx,sy) an opaque pixel of e's drawn glyph? Anchor and
 -- glyph choice mirror enemies_draw exactly (colorkey 0 = transparent), incl.
--- whichever rotor-blade tip heli_blade_black blanks this oframe
+-- whichever rotor-blade tip heli_blade_black blanks this oframe and the
+-- x-flip of a left-facing heli
 local function glyph_px(e, sx, sy)
  local base, col, row, w, h
+ local flip = e.heli and e.hface == 1
  if e.heli then
-  base = spr_heli + 2 * (e.hface or 0)
-  col, row, w, h = sx - scrx(e.x) + 8, sy - scry(e.y) + 4, 16, 8
+  base = SPRITE_HELI
+  col, row, w, h = sx - heli_x(e, scrx(e.x)), sy - scry(e.y) + 4, 16, 8
  else
   local f = e.facing or 0
-  base = spr_plane + (f < 8 and 2 * f or 32 + 2 * (f - 8))
+  base = SPRITE_PLANE + (f < 8 and 2 * f or 32 + 2 * (f - 8))
   col, row, w, h = sx - scrx(e.x) + 8, sy - scry(e.y) + 8, 16, 16
  end
  if col < 0 or col >= w or row < 0 or row >= h then return false end
@@ -245,12 +253,13 @@ local function glyph_px(e, sx, sy)
   local tx, tw = heli_blade_span(e.hface)
   if col >= tx and col < tx + tw then return false end
  end
+ if flip then col = w - 1 - col end
  return cellpx(base + col // 8 + row // 8 * 16, col % 8, row % 8) ~= 0
 end
 
 -- missile hit = the original 13x20 window ($1936) OR a swept pixel test.
 -- The window alone is narrower than the drawn glyph (13 apple px vs a
--- 16-screen-px canvas ~ 20 apple px at scale_x), so shots visibly crossing
+-- 16-screen-px canvas ~ 20 apple px at SCALE_X), so shots visibly crossing
 -- a wingtip sailed on. The sweep walks the warhead down every screen row
 -- it covered this tick (nothing tunnels past the 11-px step) and checks
 -- the shaft's two screen columns against the glyph's opaque pixels.
@@ -279,10 +288,10 @@ function enemies_hit(mx, my, my0)
    add_score(v)
    if e.heli then
     sd_heli = sd_heli + 1
-    psfx(v > 20 and sfx_divehelikill or sfx_helikill)
+    psfx(v > 20 and SFX_DIVEHELIKILL or SFX_HELIKILL)
    else
     sd_plane = sd_plane + 1
-    psfx(v > 10 and sfx_diveplanekill or sfx_planekill)
+    psfx(v > 10 and SFX_DIVEPLANEKILL or SFX_PLANEKILL)
    end
    return true
   end
@@ -300,11 +309,11 @@ end
 -- (waves 1-3 draw the whole fleet with no remap at all)
 local function enemy_pal(e, w)
  if w == 4 then
-  pal(14, 12) -- planes violet -> blue
-  pal(11, 9)  -- helis green -> orange
+  pal(COLOR_SLOT_14, COLOR_SLOT_12) -- planes violet -> blue
+  pal(COLOR_SLOT_11, COLOR_SLOT_9)  -- helis green -> orange
   return true
  elseif is_green(e, w) then
-  pal(14, 11)
+  pal(COLOR_SLOT_14, COLOR_SLOT_11)
   return true
  end
  return false
@@ -316,9 +325,9 @@ function enemies_draw()
  for _, e in ipairs(ens) do
   if e.st == 1 then -- shot: plane fireball / heli smoke puff
    draw_boom(e.x, e.y, e.ph, e.heli and xpl_h or xpl_p,
-             (e.heli or is_green(e, w)) and 12 or 9, nil, e.heli)
+             (e.heli or is_green(e, w)) and COLOR_SLOT_12 or COLOR_SLOT_9, nil, e.heli)
   elseif e.st == 5 then -- rammed: ram burst (throbs)
-   draw_boom(e.x, e.y, e.ph, xpl_r, is_green(e, w) and 12 or 9, 3)
+   draw_boom(e.x, e.y, e.ph, xpl_r, is_green(e, w) and COLOR_SLOT_12 or COLOR_SLOT_9, 3)
   elseif e.st ~= 2 then
    local ax
    if e.ex then
@@ -330,15 +339,17 @@ function enemies_draw()
    local remapped = enemy_pal(e, w)
    if e.heli then
     -- body faces the sticky HELIFACE bit, which only turns over on a nonzero
-    -- dx (see dive_facing). One sprite per heading, rotor fully drawn (96
-    -- right, 98 left); heli_blade_black fakes the spin the original got from
-    -- its E-0A/0B phase pair, eating the blade's rear and forward tip by turns
-    wspr(256 + spr_heli + 2 * (e.hface or 0), x - 8, y - 4, 2, 1, 0, ax)
-    heli_blade_black(x - 8, y - 4, e.hface)
+    -- dx (see dive_facing). The right-facing glyph, x-flipped facing left;
+    -- rotor fully drawn, and heli_blade_black fakes the spin the original got
+    -- from its E-0A/0B phase pair, eating the blade's rear and forward tip by
+    -- turns
+    local hx = heli_x(e, x)
+    wspr(SPRITE_BANK + SPRITE_HELI, hx, y - 4, 2, 1, e.hface == 1 and 1 or 0, ax)
+    heli_blade_black(hx, y - 4, e.hface)
    else
     local f = e.facing or 0
     local base = f < 8 and 2 * f or 32 + 2 * (f - 8)
-    wspr(256 + spr_plane + base, x - 8, y - 8, 2, 2, 0, ax)
+    wspr(SPRITE_BANK + SPRITE_PLANE + base, x - 8, y - 8, 2, 2, 0, ax)
    end
    if remapped then pal_reset() end -- wspr's whiten path already reset it
   end

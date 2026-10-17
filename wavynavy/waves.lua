@@ -9,13 +9,22 @@ end
 -- advance scroll by this wave's signed sea velocity ($1279 divisor)
 function waves_tick()
  prev_ph = sea_ph
- sea_ph = sea_ph + wcfg_seavel[math.min(wave, 10)]
+ sea_ph = sea_ph + WCFG_SEAVEL[math.min(wave, 10)]
+end
+
+-- a sim tick with the swell held still (the respawn get-ready): settle the
+-- draw-time phase on the current one. Left alone, prev_ph keeps the last
+-- moving tick's phase and waves_dph() swings between the two on every
+-- draw_fraction cycle, so the frozen sea and the boat riding it flicker by a
+-- pixel at 3-4 frame intervals
+function waves_hold()
+ prev_ph = sea_ph
 end
 
 -- sea surface height at apple-x (the $4A00 table's 2-crest sine).
 -- SIM clock only (collision, sea-riding): uses the current tick's phase.
 function waves_y(ax)
- return sea_mid + sea_amp * math.sin((ax + sea_ph) / sea_len * 2 * math.pi)
+ return SEA_MID + SEA_AMP * math.sin((ax + sea_ph) / SEA_LEN * 2 * math.pi)
 end
 
 -- draw-time surface height: phase interpolated between the last two ticks so
@@ -24,16 +33,16 @@ end
 function waves_dph() return lerpd(prev_ph, sea_ph) end
 -- surface height at apple-x ax for phase ph (default: the draw-time phase)
 function waves_dy(ax, ph)
- return sea_mid + sea_amp * math.sin((ax + (ph or waves_dph())) / sea_len * 2 * math.pi)
+ return SEA_MID + SEA_AMP * math.sin((ax + (ph or waves_dph())) / SEA_LEN * 2 * math.pi)
 end
 
 -- fill the pillarboxed playfield only: each screen column maps back to its
 -- apple-x through the inverse of scrx, so the swell keeps the original's shape
 function waves_draw()
  local ph = waves_dph()
- for x = fld_ox, fld_ox + fld_w - 1 do
-  local ay = waves_dy((x - fld_ox) / scale_x + fld_x0, ph)
-  line(x, scry(ay), x, scr_h - 1, 12)
+ for x = FLD_OX, FLD_OX + FLD_W - 1 do
+  local ay = waves_dy((x - FLD_OX) / SCALE_X + FLD_X0, ph)
+  line(x, scry(ay), x, SCR_H - 1, COLOR_SLOT_12)
  end
 end
 
@@ -43,16 +52,16 @@ function wspr(id, sx, sy, w, h, flip, ax)
  local surf = scry(waves_dy(ax))
  if sy >= surf then
   pal_white()
-  spr(id, sx, sy, 0, 1, flip, 0, w, h)
+  spr(id, sx, sy, COLOR_SLOT_0, 1, flip, 0, w, h)
   pal_reset()
  elseif sy + h * 8 <= surf then
-  spr(id, sx, sy, 0, 1, flip, 0, w, h)
+  spr(id, sx, sy, COLOR_SLOT_0, 1, flip, 0, w, h)
  else
-  clip(fld_ox, 0, fld_w, surf)
-  spr(id, sx, sy, 0, 1, flip, 0, w, h)
-  clip(fld_ox, surf, fld_w, scr_h - surf)
+  clip(FLD_OX, 0, FLD_W, surf)
+  spr(id, sx, sy, COLOR_SLOT_0, 1, flip, 0, w, h)
+  clip(FLD_OX, surf, FLD_W, SCR_H - surf)
   pal_white()
-  spr(id, sx, sy, 0, 1, flip, 0, w, h)
+  spr(id, sx, sy, COLOR_SLOT_0, 1, flip, 0, w, h)
   pal_reset()
   clip_field() -- restore the field clip, not the full screen
  end

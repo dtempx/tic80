@@ -1,5 +1,5 @@
--- status: the top strip (score / wave / difficulty / lives), score bookkeeping,
--- and the shared text helpers
+-- status: the HUD in the right rail (score / wave / difficulty / lives), score
+-- bookkeeping, and the shared text helpers
 
 -- add v points (4-digit wrap) and raise the hiscore to match
 function add_score(v)
@@ -8,11 +8,31 @@ function add_score(v)
  if score > hi then hi = score end
 end
 
--- hiscore centered at the top in blue (all attract screens); hidden until one
--- has actually been set - a "HISCORE 0" line is noise
+-- ------------------------------------------------------------------- HUD
+
+-- The HUD sits in the right rail, as the original's own HUD was a right-hand
+-- column: left-aligned on the rail's third column, HUD_DX past the field, in
+-- the small font, each label over its value. HISCORE (27 px) and a row of
+-- four boats (26 px) end by the screen's last column
+local HUD_DX = 2          -- the HUD's column: FLD_OX + FLD_W + HUD_DX
+local HUD_Y = {4, 25, 46} -- the three label rows; each value 8 px under its label
+local BOAT_ROW, BOAT_PITCH = 4, 7 -- reserve boats: up to 4 a row, 7 px apart, LIVES_MAX in all
+
+-- one line of rail text in the small font (fixed-width digits if asked)
+local function hud_text(s, y, c, fixed)
+ print(s, FLD_OX + FLD_W + HUD_DX, y, c, fixed, 1, true)
+end
+
+-- a label and its value (fixed-width digits) under it
+local function hud_item(label, value, y)
+ hud_text(label, y, COLOR_STATUS)
+ hud_text(value, y + 8, COLOR_SLOT_7, true)
+end
+
+-- the hiscore at the top of the rail (all attract screens and the demo);
+-- hidden until one has actually been set - a "HISCORE 0" line is noise
 function hitop()
- if not hi or hi <= 0 then return end
- cprint("HISCORE " .. hi, 1, 12)
+ if hi and hi > 0 then hud_item("HISCORE", string.format("%06d", hi), HUD_Y[1]) end
 end
 
 -- reveal a string array one line at a time, `step` frames apart
@@ -22,39 +42,35 @@ function reveal_lines(lines, t, step, y0, dy, c)
  end
 end
 
--- centered print (print returns the width, measured offscreen)
+-- print centred on the playfield (print returns the width, measured offscreen)
 function cprint(s, y, c)
- local w = print(s, 0, -8)
- print(s, (scr_w - w) // 2, y, c)
+ local w = print(s, 0, -8, COLOR_SLOT_15)
+ print(s, fld_cx(w), y, c)
 end
 
--- centered 2x-scale text, colored top/bottom halves (the original's two-tone
--- rank/banner look), split with clip()
+-- 2x-scale text centred on the playfield, colored top/bottom halves (the
+-- original's two-tone rank/banner look), split with clip()
 function bigtext(s, y, ct, cb)
  cb = cb or ct
  local w = print(s, 0, -16, ct, false, 2)
- local x = (scr_w - w) // 2
- clip(0, y, scr_w, 6)
+ local x = fld_cx(w)
+ clip(0, y, SCR_W, 6)
  print(s, x, y, ct, false, 2)
- clip(0, y + 6, scr_w, 6)
+ clip(0, y + 6, SCR_W, 6)
  print(s, x, y, cb, false, 2)
  clip()
 end
 
--- the whole strip is laid out inside the pillarboxed field [fld_ox, fld_ox+fld_w)
--- so it never spills onto the black bars beside the playing area
+-- play: score, wave (with the difficulty badge: one + for GEN-Y, two for
+-- zoomer) and the reserve boats, one icon per spare life. No hiscore, as the
+-- original's play screen ($1FDA)
 function status_draw()
- print(string.format("SCORE %06d", score), fld_ox + 2, 0, status_c, true)
- -- wave readout, with the difficulty badge appended: one + for advanced, two
- -- for expert (all one string so the label centers as a unit); nudged
- -- `wave_dx` px right of the field centre to sit clear of the score
- local s = "WAVE " .. wave
- if diff > 0 then s = s .. string.rep("+", diff) end
- local w = print(s, 0, -8, status_c, true)
- print(s, fld_ox + (fld_w - w) // 2 + wave_dx, 0, status_c, true)
- -- reserve boats right-aligned to the field's right edge: one icon per spare
- -- life, capped so a long row can never reach back to the WAVE readout
- for i = 1, math.min(math.max(lives - 1, 0), lives_max) do
-  mono.draw_solid(spr, 256 + spr_life, fld_ox + fld_w - 2 - i * 7, 1, 0)
+ hud_item("SCORE", string.format("%06d", score), HUD_Y[1])
+ hud_item("WAVE", wave .. string.rep("+", diff), HUD_Y[2])
+ hud_text("BOATS", HUD_Y[3], COLOR_STATUS)
+ local x0 = FLD_OX + FLD_W + HUD_DX
+ for i = 0, math.min(math.max(lives - 1, 0), LIVES_MAX) - 1 do
+  mono.draw_solid(spr, SPRITE_BANK + SPRITE_LIFE, x0 + i % BOAT_ROW * BOAT_PITCH,
+                  HUD_Y[3] + 8 + i // BOAT_ROW * BOAT_PITCH, COLOR_SLOT_0)
  end
 end

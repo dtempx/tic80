@@ -40,6 +40,8 @@ function otick() -- global: the headless test harness drives it directly
  if armed or p_st ~= 0 then
   waves_tick()
   hazards_tick()
+ else
+  waves_hold() -- no prev->cur phase blend while the swell is stopped
  end
  boat_tick()
  msl_tick()
@@ -56,7 +58,7 @@ end
 function play_update()
  boat_input() -- polled every display frame so no press is missed between ticks
  chopper_sound()
- oacc = oacc + ostep * gspeed * frame_dt()
+ oacc = oacc + OSTEP * GSPEED * frame_dt()
  while oacc >= 1 do
   oacc = oacc - 1
   otick()
@@ -89,9 +91,9 @@ function wave_cleared()
  goto_clear()
 end
 
--- draw the playfield, the status line and the get-ready prompt
+-- draw the playfield, the HUD (right rail) and the get-ready prompt
 function play_draw()
- cls(0)
+ cls(COLOR_SLOT_0)
  clip_field() -- world space is pillarboxed; the HUD below is not
  waves_draw()
  mines_draw()
@@ -106,6 +108,10 @@ function play_draw()
  clip()
  if demo then hitop() else status_draw() end -- demo: hiscore line only
  if not armed and p_st == 0 and time() % 1000 < 600 then
-  cprint("GET READY! PRESS FIRE", 70, 7)
+  -- boats remaining counts the boat on the water plus the reserves (= lives);
+  -- the count only shows once it is down to 2
+  local msg = lives == 1 and "LAST BOAT"
+   or lives == 2 and "2 BOATS REMAINING" or "GET READY"
+  cprint(msg .. "! PRESS FIRE", 70, COLOR_SLOT_7)
  end
 end

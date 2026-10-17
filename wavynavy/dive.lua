@@ -8,15 +8,15 @@
 -- byte so a wrapped position can't index off the page.
 function dive_map(mi, ex, oy, hi16)
  local page = (mi == 4 and 1 or mi - 1)
- local v = peek(mapl_b + page * 256
+ local v = peek(MAPL_B + page * 256
    + (math.floor(ex) & 0xf0) + ((math.floor(oy) & 0xf0) >> 4))
  return (v % 16 + hi16) * 256 + (v >> 4) * 16
 end
 
--- e.pc is a real RAM address: pbase is added at every assignment site so the
+-- e.pc is a real RAM address: PBASE is added at every assignment site so the
 -- hot fetch stays a bare peek
 function dive_start(e, off)
- e.pc = pbase + off - 1
+ e.pc = PBASE + off - 1
  e.stk = {}
  e.lp = {}
  e.seg = nil
@@ -30,7 +30,7 @@ end
 -- the VM's own re-dive jumps ($86-$88) pick a path for the plane's real
 -- column, so any edge-bounce mirror is dropped along with the old path
 local function jump(e, off)
- e.pc = pbase + off - 1
+ e.pc = PBASE + off - 1
  e.mir = nil
 end
 
@@ -53,7 +53,8 @@ local function ror5(a)
  return a & 0xf0
 end
 
-function dive_facing(e, dx, dy) -- global: formation/re-descend use it too
+-- set e's glyph facing from its step (dx, dy); global: formation/re-descend use it too
+function dive_facing(e, dx, dy)
  -- BANKCALC ($1C16): helis carry a sticky 1-bit facing, not a bank angle. A
  -- zero dx falls through at $1C1E leaving HELIFACE untouched, so the heli
  -- keeps its heading through vertical steps instead of flipping every tick.
@@ -61,7 +62,7 @@ function dive_facing(e, dx, dy) -- global: formation/re-descend use it too
   if dx ~= 0 then e.hface = dx < 0 and 1 or 0 end
   return
  end
- local v = peek(bank_b + (ror5(dx & 0xff) | (dy & 0x0f)))
+ local v = peek(BANK_B + (ror5(dx & 0xff) | (dy & 0x0f)))
  if v < 0x80 then e.facing = v end
 end
 
@@ -80,11 +81,12 @@ end
 -- has cleared the field, judged on the unwrapped ex so a left exit isn't
 -- misread as the right side. Helis: the original's rule - x wraps at 256, so
 -- an exit on either side lands in 246..255.
-local offx_lo = fld_x0 - 10  -- half-glyph in world coords (~8/scale_x)
-local offx_hi = fld_x1 + 10
+local OFFX_LO = FLD_X0 - 10  -- half-glyph in world coords (~8/SCALE_X)
+local OFFX_HI = FLD_X1 + 10
+-- true once diver e has left the field horizontally (rules above)
 function dive_offx(e)
  if not e.ex then return e.x >= 246 end
- return e.ex < offx_lo or e.ex > offx_hi
+ return e.ex < OFFX_LO or e.ex > OFFX_HI
 end
 
 -- reverse a diving plane's horizontal direction once it is fully offscreen.
@@ -144,15 +146,15 @@ function dive_tick(e)
   elseif b == 0x84 then -- call subpath at $hilo (a $7000-relative address)
    local hi, lo = fetch(e), fetch(e)
    table.insert(e.stk, e.pc)
-   e.pc = pbase + (hi - 0x70) * 256 + lo - 1
+   e.pc = PBASE + (hi - 0x70) * 256 + lo - 1
   elseif b == 0x85 then -- return from subpath
    if #e.stk > 0 then
     e.pc = table.remove(e.stk)
    end
   elseif b == 0x86 then -- re-dive at the player's column
    jump(e, dive_map(2, e.x, p_x, 0))
-  elseif b == 0x87 then -- re-dive, only on waves that enable it (never on eased beginner waves)
-   if wcfg_f87[math.min(wave, 10)] == 1 and not beg_eased() then
+  elseif b == 0x87 then -- re-dive, only on waves that enable it (never on eased boomer waves)
+   if WCFG_F87[math.min(wave, 10)] == 1 and not beg_eased() then
     jump(e, dive_map(3, e.x, p_x, 0))
    end
   elseif b == 0x88 then -- re-dive via the $88 map (paths 16 pages higher)
